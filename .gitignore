@@ -34,6 +34,7 @@ logs/
 wandb/
 
 # Data
+*.png
 *.zip
 *.tar
 *.tar.gz
