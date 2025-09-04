@@ -1,0 +1,51 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Model checkpoints
+*.ckpt
+*.pth
+*.pt
+*.h5
+*.onnx
+
+# Training outputs
+runs/
+checkpoints/
+outputs/
+logs/
+wandb/
+
+# Data
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.npz
+*.npy
+data/
+datasets/
+
+# IDE configs
+.vscode/
+.idea/
+
+# Other
+*.swp
+
