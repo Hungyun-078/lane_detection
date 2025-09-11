@@ -21,7 +21,6 @@ label_dir = "/home/scill/Downloads/CULane/laneseg_label_w16/laneseg_label_w16/dr
 
 image_transform = transforms.Compose([
         transforms.Resize((INPUT_H, INPUT_W)),
-        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
 	transforms.ToTensor(),
 ])
 label_transform = transforms.Compose([
@@ -54,7 +53,7 @@ with torch.no_grad():
 
         logits = model(imgs)
         probs = torch.sigmoid(logits)
-        preds = (probs > THRESH).float()
+        preds = (probs > 0.35).float()
 
 		#變成1D
         y_true = masks.view(-1).cpu().numpy().astype(np.uint8)
