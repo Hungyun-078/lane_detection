@@ -42,40 +42,41 @@ model.eval()
 print("模型載入完成，開始測試...")
 
 # === 評估每一個 batch 後做平均 ===
-f1_scores = []
-precisions = []
-recalls = []
+TP = 0
+FP = 0
+FN = 0
 
 with torch.no_grad():
-    sample=0
+    sample = 0
     for imgs, masks in test_loader:
-        imgs, masks = imgs.to(device), masks.to(device)
+        imgs = imgs.to(device, non_blocking=True)
+        masks = masks.to(device, non_blocking=True)
 
-        outputs = torch.sigmoid(model(imgs))
-        preds = (outputs > 0.6).float()
+        logits = model(imgs)
+        probs = torch.sigmoid(logits)
+        preds = (probs > THRESH).float()
 
-        # 轉為 numpy 形式
-        y_true = masks.cpu().numpy().reshape(-1)
-        y_pred = preds.cpu().numpy().reshape(-1)
+		#變成1D
+        y_true = masks.view(-1).cpu().numpy().astype(np.uint8)
+        y_pred = preds.view(-1).cpu().numpy().astype(np.uint8)
 
-        # 濾掉全 0 的 label（無標記）
-        if y_true.max() == 0:
+		if y_true.max() == 0:
+            sample += imgs.size(0)
+            print(f"Samples: {sample}", end="\r")
             continue
 
         # 計算每個 batch 的指標
-        precision = precision_score(y_true, y_pred, zero_division=0)
-        recall = recall_score(y_true, y_pred, zero_division=0)
-        f1 = f1_score(y_true, y_pred, zero_division=0)
+		TP += np.sum((y_pred == 1) & (y_true == 1))
+		FP += np.sum((y_pred == 1) & (y_true == 0))
+        FN += np.sum((y_pred == 0) & (y_true == 1))
 
-        sample += imgs.size(0)
-        print(f"Samples: {sample}",end="\r")
+    
+eps = 1e-9
+precision_micro = TP / (TP + FP + eps)
+recall_micro    = TP / (TP + FN + eps)
+f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + eps)
 
-        precisions.append(precision)
-        recalls.append(recall)
-        f1_scores.append(f1)
-
-# === 平均結果 ===
-print("\n===== 測試集平均結果 (基於 batch) =====")
-print(f"📊 Precision: {np.mean(precisions):.4f}")
-print(f"📊 Recall:    {np.mean(recalls):.4f}")
-print(f"📊 F1 Score:  {np.mean(f1_scores):.4f}")
+print("===== 測試集整體結果（micro / 累計）=====")
+print(f"Precision: {precision_micro:.4f}")
+print(f"Recall:    {recall_micro:.4f}")
+print(f"F1 Score:  {f1_micro:.4f}")
