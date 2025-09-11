@@ -1,10 +1,6 @@
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, Subset
-from torchvision import transforms
-from PIL import Image
-from sklearn.metrics import precision_score, recall_score, f1_score
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
