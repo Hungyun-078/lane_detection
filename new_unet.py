@@ -22,7 +22,7 @@ CKPT_PATH = OUT_DIR / "checkpoint.pth"
 MAX_SAMPLES = 10000
 EPOCHS = 50
 BATCH_SIZE = 4
-BASE_LR = 1e-4
+BASE_LR = 1e-3
 INPUT_H, INPUT_W = 288, 800
 THRESH = 0.35
 SEED = 1337
@@ -217,9 +217,14 @@ def main():
         		FP += np.sum((y_pred == 1) & (y_true == 0))
                 FN += np.sum((y_pred == 0) & (y_true == 1))
 
-        # ---- Save checkpoint ----
-        is_best = mean_f1 > best_f1
-        best_f1 = max(best_f1, mean_f1)
+        eps = 1e-9
+        precision_micro = TP / (TP + FP + eps)
+        recall_micro    = TP / (TP + FN + eps)
+        f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + eps)
+
+
+        # ---- Save checkpoint ---
+        best_f1 = max(best_f1, f1_micro)
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -229,7 +234,7 @@ def main():
             'best_f1': best_f1,
             'threshold': THRESH,
         }, CKPT_PATH)
-        if is_best:
+        if f1_micro > best_f1:
             torch.save(model.state_dict(), OUT_DIR / "best_f1_model.pth")
 
         # ---- Save sample predictions ----
