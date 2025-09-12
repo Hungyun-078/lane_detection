@@ -248,7 +248,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("Interrupted. Saving skeleton checkpoint...")
-        OUT_DIR.mkdir(parents=True, exist_ok=True)
-        torch.save({'loss_history': []}, CKPT_PATH)
-        print("Checkpoint skeleton saved.")
+        print("Interrupted by keyboard")
