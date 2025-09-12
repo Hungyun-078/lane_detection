@@ -189,25 +189,33 @@ def main():
         model.eval()
         val_loss_acc = 0.0
         p_list, r_list, f1_list, iou_list = [], [], [], []
+        TP = 0
+        FP = 0
+        FN = 0
+        
         with torch.no_grad():
-            for imgs, masks in val_loader:
+            sample = 0
+            for imgs, masks in test_loader:
                 imgs = imgs.to(device, non_blocking=True)
                 masks = masks.to(device, non_blocking=True)
+        
                 logits = model(imgs)
-                val_loss_acc += loss_fn(logits, masks).item()
-                p, r, f1, iou = compute_metrics(logits, masks, thresh=THRESH)
-                p_list.append(p); r_list.append(r); f1_list.append(f1); iou_list.append(iou)
-
-        avg_val_loss = val_loss_acc / max(1, len(val_loader))
-        mean_f1 = sum(f1_list)/len(f1_list)
-        mean_p = sum(p_list)/len(p_list)
-        mean_r = sum(r_list)/len(r_list)
-        mean_iou = sum(iou_list)/len(iou_list)
-
-        scheduler.step(avg_val_loss)
-        dt = time.time() - t0
-        print(f"Epoch {epoch+1}/{EPOCHS} | train_loss={avg_train_loss:.4f} | val_loss={avg_val_loss:.4f} "
-              f"| F1={mean_f1:.4f} P={mean_p:.4f} R={mean_r:.4f} IoU={mean_iou:.4f} | {dt:.1f}s")
+                probs = torch.sigmoid(logits)
+                preds = (probs > 0.35).float()
+        
+        		#變成1D
+                y_true = masks.view(-1).cpu().numpy().astype(np.uint8)
+                y_pred = preds.view(-1).cpu().numpy().astype(np.uint8)
+        
+        		if y_true.max() == 0:
+                    sample += imgs.size(0)
+                    print(f"Samples: {sample}", end="\r")
+                    continue
+        
+                # 計算每個 batch 的指標
+        		TP += np.sum((y_pred == 1) & (y_true == 1))
+        		FP += np.sum((y_pred == 1) & (y_true == 0))
+                FN += np.sum((y_pred == 0) & (y_true == 1))
 
         # ---- Save checkpoint ----
         is_best = mean_f1 > best_f1
