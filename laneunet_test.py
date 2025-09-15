@@ -13,7 +13,7 @@ print("=== 測試 CULane 資料集的 UNet 模型 ===")
 
 
 # ==== 路徑與設定 ====
-model_path = "/home/scill/unet_lane_detection/model_final_10000.pth"
+model_path = "/home/scill/unet_lane_detection/runs_culane_unet/model_final.pth"
 
 # === 設定資料與模型 ===
 image_dir = "/home/scill/Downloads/CULane/driver_161_90frame/driver_161_90frame"
@@ -45,37 +45,33 @@ TP = 0
 FP = 0
 FN = 0
 
+
 with torch.no_grad():
-    sample = 0
-    for imgs, masks in test_loader:
-        imgs = imgs.to(device, non_blocking=True)
-        masks = masks.to(device, non_blocking=True)
+        sample = 0
+        for imgs, masks in test_loader:
+            imgs = imgs.to(device, non_blocking=True)
+            masks = masks.to(device, non_blocking=True)
 
-        logits = model(imgs)
-        probs = torch.sigmoid(logits)
-        preds = (probs > 0.35).float()
+            logits = model(imgs)
+            probs = torch.sigmoid(logits)
+            preds = (probs > 0.35).float()
 
-		#變成1D
-        y_true = masks.view(-1).cpu().numpy().astype(np.uint8)
-        y_pred = preds.view(-1).cpu().numpy().astype(np.uint8)
+            # 拉平成 1D（像素級）
+            y_true = masks.view(-1)
+            y_pred = preds.view(-1)
 
-		if y_true.max() == 0:
-            sample += imgs.size(0)
-            print(f"Samples: {sample}", end="\r")
-            continue
+            # 累計 TP/FP/FN（注意：不需要 TN 計算 F1）
+            TP += (y_pred * y_true).sum().item()
+            FP += (y_pred * (1 - y_true)).sum().item()
+            FN += (((1 - y_pred) * y_true)).sum().item()
+            sample += img.size(0)
+            print(f"sample:{sample}",end = "\r")
 
-        # 計算每個 batch 的指標
-		TP += np.sum((y_pred == 1) & (y_true == 1))
-		FP += np.sum((y_pred == 1) & (y_true == 0))
-        FN += np.sum((y_pred == 0) & (y_true == 1))
+precision = TP / (TP + FP)
+recall    = TP / (TP + FN)
+f1        = 2 * precision * recall / (precision + recall)
 
-    
-eps = 1e-9
-precision_micro = TP / (TP + FP + eps)
-recall_micro    = TP / (TP + FN + eps)
-f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + eps)
-
-print("===== 測試集整體結果（micro / 累計）=====")
-print(f"Precision: {precision_micro:.4f}")
-print(f"Recall:    {recall_micro:.4f}")
-print(f"F1 Score:  {f1_micro:.4f}")
+print("\n===== 測試集平均結果 (基於 batch) =====")
+print(f" Precision: {np.mean(precision):.4f}")
+print(f" Recall:    {np.mean(recall):.4f}")
+print(f" F1 Score:  {np.mean(f1):.4f}")
