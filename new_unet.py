@@ -61,23 +61,6 @@ class BCEDiceLoss(nn.Module):
     def forward(self, logits, targets):
         return self.bce_w * self.bce(logits, targets) + (1 - self.bce_w) * self.dice(logits, targets)
 
-@torch.no_grad()
-def compute_metrics(logits, targets, thresh=0.5, eps=1e-6):
-    probs = torch.sigmoid(logits)
-    preds = (probs > thresh).float()
-    preds = preds.view(preds.size(0), -1)
-    targets = targets.view(targets.size(0), -1)
-    tp = (preds * targets).sum(dim=1)
-    fp = (preds * (1 - targets)).sum(dim=1)
-    fn = ((1 - preds) * targets).sum(dim=1)
-    precision = (tp + eps) / (tp + fp + eps)
-    recall = (tp + eps) / (tp + fn + eps)
-    f1 = 2 * precision * recall / (precision + recall + eps)
-    inter = tp
-    union = tp + fp + fn
-    iou = (inter + eps) / (union + eps)
-    return precision.mean().item(), recall.mean().item(), f1.mean().item(), iou.mean().item()
-
 def save_visuals(imgs, masks, preds, out_dir: Path, start_idx=0, max_to_save=40, thresh=0.35):
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
