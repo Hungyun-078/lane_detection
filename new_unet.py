@@ -15,11 +15,12 @@ from dataset import CULaneDataset
 # -----------------------------
 # Config
 # -----------------------------
-IMAGE_DIR = "/home/scill/Downloads/CULane/driver_161_90frame/driver_161_90frame"
-LABEL_DIR = "/home/scill/Downloads/CULane/laneseg_label_w16/laneseg_label_w16/driver_161_90frame"
-OUT_DIR = Path("runs_culane_unet")
+IMAGE_DIR = "/home/scill/Downloads/CULane/driver_182_30frame/driver_182_30frame"
+LABEL_DIR = "/home/scill/Downloads/CULane/laneseg_label_w16/laneseg_label_w16/driver_182_30frame"
+OUT_DIR = Path("runs_culane_unet_182_30")
 CKPT_PATH = OUT_DIR / "checkpoint.pth"
-MAX_SAMPLES = 10000
+TRAIN_SAMPLE = 8000
+VAL_SAMPLE = 1000
 EPOCHS = 50
 BATCH_SIZE = 4
 BASE_LR = 1e-3
@@ -115,16 +116,16 @@ def main():
     ])
 
     # Dataset
-    ds_full = CULaneDataset(IMAGE_DIR, LABEL_DIR, image_transform, label_transform)
-    if MAX_SAMPLES is not None:
-        ds_full = Subset(ds_full, range(min(MAX_SAMPLES, len(ds_full))))
-
+    ds_full = CULaneDataset(IMAGE_DIR, LABEL_DIR, image_transform, label_transform) 
+    ds_full = Subset(ds_full, range(min(9000, len(ds_full))))
+ 
     # Split train/val
-    val_len = int(round(len(ds_full) * 0.1))
-    train_len = len(ds_full) - val_len
+    total_len = len(ds_full)
+    val_len = min(VAL_SAMPLE, total_len)
+    train_len = min(TRAIN_SAMPLE, total_len-val_len)
     train_ds, val_ds = random_split(ds_full, [train_len, val_len], generator=torch.Generator().manual_seed(SEED))
 
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True, drop_last=False)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
 
     # Device
@@ -188,43 +189,50 @@ def main():
         # ---- Validation ----
         model.eval()
         val_loss_acc = 0.0
-        p_list, r_list, f1_list, iou_list = [], [], [], []
-        TP = 0
-        FP = 0
-        FN = 0
-        
+        val_batches = 0
+        TP = FP = FN = 0.0
+        eps = 1e-6
+
         with torch.no_grad():
-            sample = 0
-            for imgs, masks in test_loader:
+            for imgs, masks in val_loader:
                 imgs = imgs.to(device, non_blocking=True)
                 masks = masks.to(device, non_blocking=True)
-        
-                logits = model(imgs)
+
+                with torch.cuda.amp.autocast(enabled=(device.type == 'cuda')):
+                    logits = model(imgs)
+                    val_loss = loss_fn(logits, masks)
+
+                val_loss_acc += val_loss.item()
+                val_batches += 1
+
                 probs = torch.sigmoid(logits)
-                preds = (probs > 0.35).float()
-        
-        		#變成1D
-                y_true = masks.view(-1).cpu().numpy().astype(np.uint8)
-                y_pred = preds.view(-1).cpu().numpy().astype(np.uint8)
-        
-        		if y_true.max() == 0:
-                    sample += imgs.size(0)
-                    print(f"Samples: {sample}", end="\r")
-                    continue
-        
-                # 計算每個 batch 的指標
-        		TP += np.sum((y_pred == 1) & (y_true == 1))
-        		FP += np.sum((y_pred == 1) & (y_true == 0))
-                FN += np.sum((y_pred == 0) & (y_true == 1))
+                preds = (probs > THRESH).float()
 
-        eps = 1e-9
-        precision_micro = TP / (TP + FP + eps)
-        recall_micro    = TP / (TP + FN + eps)
-        f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + eps)
+                # 拉平成 1D
+                y_true = masks.view(-1)
+                y_pred = preds.view(-1)
 
+                TP += (y_pred * y_true).sum().item()
+                FP += (y_pred * (1 - y_true)).sum().item()
+                FN += ((1 - y_pred) * y_true).sum().item()
 
-        # ---- Save checkpoint ---
-        best_f1 = max(best_f1, f1_micro)
+        avg_val_loss = val_loss_acc / max(1, val_batches)
+        P_micro = TP / (TP + FP + eps)
+        R_micro = TP / (TP + FN + eps)
+        F1_micro = 2 * P_micro * R_micro / (P_micro + R_micro + eps)
+        mean_iou = TP / (TP + FP + FN + eps)
+
+        scheduler.step(avg_val_loss)
+        dt = time.time() - t0
+        print(
+            f"Epoch {epoch+1}/{EPOCHS} | train_loss={avg_train_loss:.4f} | "
+            f"val_loss={avg_val_loss:.4f} | F1={F1_micro:.4f} "
+            f"P={P_micro:.4f} R={R_micro:.4f} IoU={mean_iou:.4f} | {dt:.1f}s"
+        )
+
+        # ---- Save checkpoint ----
+        is_best = F1_micro > best_f1
+        best_f1 = max(best_f1, F1_micro)
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -234,7 +242,7 @@ def main():
             'best_f1': best_f1,
             'threshold': THRESH,
         }, CKPT_PATH)
-        if f1_micro > best_f1:
+        if is_best:
             torch.save(model.state_dict(), OUT_DIR / "best_f1_model.pth")
 
         # ---- Save sample predictions ----
@@ -261,4 +269,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("Interrupted by keyboard")
+        print("Interrupted.")
