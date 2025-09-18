@@ -28,9 +28,7 @@ INPUT_H, INPUT_W = 288, 800
 THRESH = 0.35
 SEED = 1337
 
-# -----------------------------
-# Utils
-# -----------------------------
+
 def set_seed(seed: int):
     random.seed(seed)
     torch.manual_seed(seed)
@@ -79,9 +77,7 @@ def save_visuals(imgs, masks, preds, out_dir: Path, start_idx=0, max_to_save=40,
         plt.close()
         saved += 1
 
-# -----------------------------
-# Main
-# -----------------------------
+
 def main():
     set_seed(SEED)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -252,4 +248,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("Interrupted.")
+        print("Interrupted by keyboard. ")
